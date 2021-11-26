@@ -1,0 +1,2 @@
+class ProducerException(Exception):
+    pass
