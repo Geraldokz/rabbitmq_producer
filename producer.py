@@ -11,7 +11,8 @@ from retry_policy import retry
 load_dotenv()
 
 RABBITMQ_HOST = os.getenv('RABBITMQ_HOST')
-RABBITMQ_QUEUE = os.getenv('RABBITMQ_QUEUE')
+RABBITMQ_VIRTUAL_HOST = os.getenv('RABBITMQ_VIRTUAL_HOST')
+RABBITMQ_KEY = os.getenv('RABBITMQ_KEY')
 RABBITMQ_EXCHANGE = os.getenv('RABBITMQ_EXCHANGE')
 
 
@@ -22,7 +23,7 @@ def push_to_queue(data: dict) -> None:
 
     channel.basic_publish(
         exchange=RABBITMQ_EXCHANGE,
-        routing_key=RABBITMQ_QUEUE,
+        routing_key=RABBITMQ_KEY,
         body=json.dumps(data, indent=2)
     )
 
@@ -32,7 +33,10 @@ def push_to_queue(data: dict) -> None:
 def _connect_to_rabbitmq() -> pika.BlockingConnection.channel:
     """Инициализирует подключение к rabbitmq"""
     try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
+        connection = pika.BlockingConnection(pika.ConnectionParameters(
+            host=RABBITMQ_HOST,
+            virtual_host=RABBITMQ_VIRTUAL_HOST)
+        )
         return connection.channel()
     except Exception as e:
         raise ProducerException(f'error while connecting to rabbitmq, traceback below\n{str(e)}')
@@ -41,7 +45,7 @@ def _connect_to_rabbitmq() -> pika.BlockingConnection.channel:
 def _declare_rabbitmq_queue(channel: pika.BlockingConnection.channel) -> None:
     """Создает очередь в rabbitmq"""
     try:
-        channel.queue_declare(queue=RABBITMQ_QUEUE)
+        channel.queue_declare(queue=RABBITMQ_KEY)
     except Exception as e:
         raise ProducerException(f'error while declaring rabbitmq queue, traceback below\n{str(e)}')
 
