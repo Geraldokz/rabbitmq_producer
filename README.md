@@ -24,8 +24,8 @@
 Пример запуска
 
 ~~~~
-from producer import RabbitMQProducer
 from exceptions import ProducerException
+from producer import RabbitMQProducer
 
 
 if __name__ == '__main__':
