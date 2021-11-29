@@ -1,6 +1,6 @@
 import os
 import json
-from typing import NamedTuple
+from typing import NamedTuple, Union
 from multiprocessing import Process, Queue
 
 import pika
@@ -32,7 +32,7 @@ class RabbitMQProducer:
         data: str
         retry_exception: type(Exception)
         retries_count: int
-        retry_delay: float
+        retry_delay: Union[int, float]
         retry_delay_increase: int
 
     def __init__(self):
@@ -60,37 +60,34 @@ class RabbitMQProducer:
         queue_listener = Process(target=self._listen_to_queue)
         queue_listener.start()
 
-        return queue_listener
-
     def _listen_to_queue(self) -> None:
         """
-        Получает из очереди сообщение в виде именованного кортежа QueueMessage, декорирует
-        функцию push_to_rabbitmq полученными retry политиками из сообщения и запускает
-        отправку данных в rabbitmq
+        Получает сообщение из очереди в виде именованного кортежа QueueMessage
+        и передает его в метод _push_to_rabbitmq
         """
+        channel = _connect_to_rabbitmq()
+        _declare_rabbitmq_queue(channel)
+
         while True:
             queue_message = self.queue.get()
-
-            @retry(exception=queue_message.retry_exception, retries=queue_message.retries_count,
-                   delay=queue_message.retry_delay, delay_increase=queue_message.retry_delay_increase)
-            def push_to_rabbitmq():
-                _push_to_rabbitmq(queue_message.data)
-
-            push_to_rabbitmq()
+            _push_to_rabbitmq(queue_message, channel)
 
 
-def _push_to_rabbitmq(data: str) -> None:
-    """Отправялет данные в очередь rabbitmq"""
-    channel = _connect_to_rabbitmq()
-    _declare_rabbitmq_queue(channel)
+def _push_to_rabbitmq(message: RabbitMQProducer.QueueMessage, channel: pika.BlockingConnection.channel) -> None:
+    """
+    Декорирует функцию send_message полученными retry политиками из сообщения
+    и запускает отправку данных в rabbitmq
+    """
+    @retry(exception=message.retry_exception, retries=message.retries_count,
+           delay=message.retry_delay, delay_increase=message.retry_delay_increase)
+    def send_message():
+        channel.basic_publish(
+            exchange=RABBITMQ_EXCHANGE,
+            routing_key=RABBITMQ_KEY,
+            body=message.data
+        )
 
-    channel.basic_publish(
-        exchange=RABBITMQ_EXCHANGE,
-        routing_key=RABBITMQ_KEY,
-        body=data
-    )
-
-    channel.close()
+    send_message()
 
 
 def _connect_to_rabbitmq() -> pika.BlockingConnection.channel:

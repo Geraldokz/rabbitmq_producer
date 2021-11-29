@@ -11,5 +11,4 @@ if __name__ == '__main__':
     rabbitmq_producer = RabbitMQProducer()
 
     while True:
-        print('send message to queue')
         rabbitmq_producer.push_message_to_queue(data_to_push, retries_count=2)
