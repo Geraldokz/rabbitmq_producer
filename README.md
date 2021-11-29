@@ -25,7 +25,6 @@
 
 ~~~~
 from producer import RabbitMQProducer
-
 from exceptions import ProducerException
 
 
