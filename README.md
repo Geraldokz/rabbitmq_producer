@@ -1,7 +1,7 @@
 # rabbitmq_producer
 ***Python module for sending data to rabbitmq***
 
-Для начала работы необходимо создать экзмеляр класса `RabbitMQProducer` из модуля `producer`
+Для начала работы необходимо создать экзмеляр класса `RabbitMQProducer` из модуля `producer`.
 
 При создании экземпляра класса будет создана очередь и отдельный процесс, который прослушивает очередь и отправляет данные в rabbitmq.
 
@@ -17,10 +17,16 @@
 
 `retry_delay_increase` - коэффициент увеличения задержки
 
-Пример
+Единственным обязательным аргументов является `data`, все остальные установлены по умолчанию.
+
+В переменных окружения задаются следующие конфигурационные параметры для подключения к rabbitmq: `RABBITMQ_HOST`, `RABBITMQ_KEY`, `RABBITMQ_EXCHANGE`, `RABBITMQ_VIRTUAL_HOST`.
+
+Пример запуска
 
 ~~~~
 from producer import RabbitMQProducer
+
+from exceptions import ProducerException
 
 
 if __name__ == '__main__':
@@ -31,4 +37,12 @@ if __name__ == '__main__':
   
   rabbitmq_producer = RabbitMQProducer()
   
+  while True:
+    rabbitmq_producer.push_message_to_queue(
+      data=data_to_push,
+      retry_exception=ProducerException,
+      retries_count=2,
+      retry_delay=1.5,
+      retry_delay_increase=3
+    )
 ~~~~
