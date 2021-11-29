@@ -1,8 +1,9 @@
 import time
 from functools import wraps
+from typing import Union
 
 
-def retry(exception=Exception, retries=5, delay=0.5, delay_increase=2):
+def retry(exception: type(Exception), retries: int, delay: Union[int, float], delay_increase: int):
     """
     Декоратор, вызывающий повторное выполнение функции при возникновении
     исключения

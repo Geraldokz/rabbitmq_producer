@@ -1,5 +1,7 @@
 import os
 import json
+from typing import NamedTuple
+from multiprocessing import Process, Queue
 
 import pika
 import pika.exceptions
@@ -16,7 +18,68 @@ RABBITMQ_KEY = os.getenv('RABBITMQ_KEY')
 RABBITMQ_EXCHANGE = os.getenv('RABBITMQ_EXCHANGE')
 
 
-def push_to_queue(data: dict) -> None:
+class RabbitMQProducer:
+    """Класс для отправки данных в rabbitmq
+
+    При создании экземпляра класса создается очередь, в которую отправляются данные
+    и вызывается метод _init_queue_listener, создающий отдельный процесс
+    для прослушивания очереди и отправки данных в rabbitmq
+
+    Метод push_message_to_queue отправляет данные в очередь
+    """
+
+    class QueueMessage(NamedTuple):
+        data: str
+        retry_exception: type(Exception)
+        retries_count: int
+        retry_delay: float
+        retry_delay_increase: int
+
+    def __init__(self):
+        self.queue = Queue()
+        self._init_queue_listener()
+
+    def push_message_to_queue(self, data: dict, retry_exception=Exception, retries_count=5, retry_delay=0.5,
+                              retry_delay_increase=2) -> None:
+        """Формирует именнованный кортеж с принятым словарем и retry политикамии и отпраляет его в очередь"""
+        if isinstance(data, dict):
+            queue_message = self.QueueMessage(
+                data=json.dumps(data, indent=2),
+                retry_exception=retry_exception,
+                retries_count=retries_count,
+                retry_delay=retry_delay,
+                retry_delay_increase=retry_delay_increase
+            )
+            self.queue.put(queue_message)
+
+    def _init_queue_listener(self):
+        """
+        Запускает отдельный процесс прослушивания очереди на наличие новых данных
+        и отправки их в rabbitmq
+        """
+        queue_listener = Process(target=self._listen_to_queue)
+        queue_listener.start()
+
+        return queue_listener
+
+    def _listen_to_queue(self) -> None:
+        """
+        Получает из очереди сообщение в виде именованного кортежа QueueMessage, декорирует
+        функцию push_to_rabbitmq полученными retry политиками из сообщения и запускает
+        отправку данных в rabbitmq
+        """
+        while True:
+            queue_message = self.queue.get()
+
+            @retry(exception=queue_message.retry_exception, retries=queue_message.retries_count,
+                   delay=queue_message.retry_delay, delay_increase=queue_message.retry_delay_increase)
+            def push_to_rabbitmq():
+                _push_to_rabbitmq(queue_message.data)
+
+            push_to_rabbitmq()
+
+
+def _push_to_rabbitmq(data: str) -> None:
     """Отправялет данные в очередь rabbitmq"""
     channel = _connect_to_rabbitmq()
     _declare_rabbitmq_queue(channel)
@@ -24,7 +87,7 @@ def push_to_queue(data: dict) -> None:
     channel.basic_publish(
         exchange=RABBITMQ_EXCHANGE,
         routing_key=RABBITMQ_KEY,
-        body=json.dumps(data, indent=2)
+        body=data
     )
 
     channel.close()
@@ -48,18 +111,3 @@ def _declare_rabbitmq_queue(channel: pika.BlockingConnection.channel) -> None:
         channel.queue_declare(queue=RABBITMQ_KEY)
     except Exception as e:
         raise ProducerException(f'error while declaring rabbitmq queue, traceback below\n{str(e)}')
-
-
-if __name__ == '__main__':
-    data_to_push = {
-        'header1': '123',
-        'header2': 'abc',
-        'header3': 'zxc',
-    }
-
-    @retry(ProducerException, retries=2)
-    def send_low_severity_event(data: dict) -> None:
-        push_to_queue(data)
-
-
-    send_low_severity_event(data_to_push)
