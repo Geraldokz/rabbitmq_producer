@@ -3,7 +3,7 @@ from functools import wraps
 from typing import Union
 
 
-def retry(exception: type(Exception), retries: int, delay: Union[int, float], delay_increase: int):
+def retry(exception: type(Exception), retries: int, delay: Union[int, float], delay_increase: int, max_delay: int):
     """
     Декоратор, вызывающий повторное выполнение функции при возникновении
     исключения
@@ -12,6 +12,7 @@ def retry(exception: type(Exception), retries: int, delay: Union[int, float], de
     :param retries: кол-во попыток
     :param delay: задержка выполнения функции
     :param delay_increase: коэффициент увеличения задержки
+    :param max_delay: максимально допустимое время задержки
     :return:
     """
     def retry_decorator(f):
@@ -29,6 +30,6 @@ def retry(exception: type(Exception), retries: int, delay: Union[int, float], de
                         break
 
                     time.sleep(_delay)
-                    _delay *= delay_increase
+                    _delay = _delay * delay_increase if _delay * delay_increase < max_delay else max_delay
         return func_with_retries
     return retry_decorator

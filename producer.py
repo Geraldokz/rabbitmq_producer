@@ -34,13 +34,14 @@ class RabbitMQProducer:
         retries_count: int
         retry_delay: Union[int, float]
         retry_delay_increase: int
+        retry_max_delay: int
 
     def __init__(self):
         self.queue = Queue()
         self._init_queue_listener()
 
     def push_message_to_queue(self, data: dict, retry_exception=Exception, retries_count=5, retry_delay=0.5,
-                              retry_delay_increase=2) -> None:
+                              retry_delay_increase=2, retry_max_delay=30) -> None:
         """Формирует именнованный кортеж с принятым словарем и retry политикамии и отпраляет его в очередь"""
         if isinstance(data, dict):
             queue_message = self.QueueMessage(
@@ -48,7 +49,8 @@ class RabbitMQProducer:
                 retry_exception=retry_exception,
                 retries_count=retries_count,
                 retry_delay=retry_delay,
-                retry_delay_increase=retry_delay_increase
+                retry_delay_increase=retry_delay_increase,
+                retry_max_delay=retry_max_delay
             )
             self.queue.put(queue_message)
 
@@ -79,7 +81,7 @@ def _push_to_rabbitmq(message: RabbitMQProducer.QueueMessage, channel: pika.Bloc
     и запускает отправку данных в rabbitmq
     """
     @retry(exception=message.retry_exception, retries=message.retries_count,
-           delay=message.retry_delay, delay_increase=message.retry_delay_increase)
+           delay=message.retry_delay, delay_increase=message.retry_delay_increase, max_delay=message.retry_max_delay)
     def send_message():
         channel.basic_publish(
             exchange=RABBITMQ_EXCHANGE,
