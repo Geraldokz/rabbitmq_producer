@@ -17,6 +17,8 @@
 
 `retry_delay_increase` - коэффициент увеличения задержки
 
+`retry_max_delay` - максимально допустимое время задержки
+
 Единственным обязательным аргументов является `data`, все остальные установлены по умолчанию.
 
 В переменных окружения задаются следующие конфигурационные параметры для подключения к rabbitmq: `RABBITMQ_HOST`, `RABBITMQ_KEY`, `RABBITMQ_EXCHANGE`, `RABBITMQ_VIRTUAL_HOST`.
@@ -42,6 +44,7 @@ if __name__ == '__main__':
       retry_exception=ProducerException,
       retries_count=2,
       retry_delay=1.5,
-      retry_delay_increase=3
+      retry_delay_increase=3,
+      retry_max_delay=40
     )
 ~~~~
