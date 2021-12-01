@@ -2,6 +2,8 @@ import time
 from functools import wraps
 from typing import Union
 
+from pika.exceptions import ConnectionClosed, ChannelClosed
+
 
 def retry(exception: type(Exception), retries: int, delay: Union[int, float], delay_increase: int, max_delay: int):
     """
@@ -23,7 +25,9 @@ def retry(exception: type(Exception), retries: int, delay: Union[int, float], de
             while _retries > 1:
                 try:
                     return f(*args, **kwargs)
-                except exception as e:
+                except (ConnectionClosed, ChannelClosed) as e:
+                    raise e
+                except exception:
                     _retries -= 1
 
                     if _retries == 1:

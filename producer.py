@@ -4,10 +4,9 @@ from typing import NamedTuple, Union
 from multiprocessing import Process, Queue
 
 import pika
-import pika.exceptions
 from dotenv import load_dotenv
+from pika.exceptions import ConnectionClosed, ChannelClosed
 
-from exeptions import ProducerException
 from retry_policy import retry
 
 load_dotenv()
@@ -66,13 +65,19 @@ class RabbitMQProducer:
         """
         Получает сообщение из очереди в виде именованного кортежа QueueMessage
         и передает его в метод _push_to_rabbitmq
+
+        В случае возникновения проблем с подключением к rabbitmq, запускается
+        процесс переподключения
         """
         channel = _connect_to_rabbitmq()
-        _declare_rabbitmq_queue(channel)
 
         while True:
             queue_message = self.queue.get()
-            _push_to_rabbitmq(queue_message, channel)
+            try:
+                _push_to_rabbitmq(queue_message, channel)
+            except (ConnectionClosed, ChannelClosed):
+                channel = _reconnect_to_rabbitmq()
+                _push_to_rabbitmq(queue_message, channel)
 
 
 def _push_to_rabbitmq(message: RabbitMQProducer.QueueMessage, channel: pika.BlockingConnection.channel) -> None:
@@ -94,19 +99,22 @@ def _push_to_rabbitmq(message: RabbitMQProducer.QueueMessage, channel: pika.Bloc
 
 def _connect_to_rabbitmq() -> pika.BlockingConnection.channel:
     """Инициализирует подключение к rabbitmq"""
-    try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(
-            host=RABBITMQ_HOST,
-            virtual_host=RABBITMQ_VIRTUAL_HOST)
-        )
-        return connection.channel()
-    except Exception as e:
-        raise ProducerException(f'error while connecting to rabbitmq, traceback below\n{str(e)}')
+    connection = pika.BlockingConnection(pika.ConnectionParameters(
+        host=RABBITMQ_HOST,
+        virtual_host=RABBITMQ_VIRTUAL_HOST)
+    )
+
+    channel = connection.channel()
+    channel.queue_declare(RABBITMQ_KEY)
+
+    return channel
 
 
-def _declare_rabbitmq_queue(channel: pika.BlockingConnection.channel) -> None:
-    """Создает очередь в rabbitmq"""
-    try:
-        channel.queue_declare(queue=RABBITMQ_KEY)
-    except Exception as e:
-        raise ProducerException(f'error while declaring rabbitmq queue, traceback below\n{str(e)}')
+def _reconnect_to_rabbitmq() -> pika.BlockingConnection.channel:
+    """Запускает процесс переподключения к rabbitmq"""
+    while True:
+        try:
+            channel = _connect_to_rabbitmq()
+            return channel
+        except Exception:
+            continue
